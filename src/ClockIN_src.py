@@ -7,7 +7,7 @@ from tkinter import messagebox
 import csv
 import sys
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from tkcalendar import Calendar
 from tktimepicker import AnalogPicker, constants, AnalogThemes
 from tkinter.font import Font
@@ -571,8 +571,8 @@ class MainPage(tk.Frame):
         self.label_flex_total = tk.Label(frame_buttons, text="Flex i alt: 999", font=Font(size=16, weight="bold"))
         self.label_flex_total.pack(side="top", padx=20, pady=(50, 10))
 
-        label_flex_week = tk.Label(frame_buttons, text="Flex i denne uge: 999", font=Font(size=12))
-        label_flex_week.pack(side="top", padx=20)
+        self.label_flex_week = tk.Label(frame_buttons, text="Flex i denne uge: 999", font=Font(size=12))
+        self.label_flex_week.pack(side="top", padx=20)
 
         # Button to register new off day
         btn_new1 = tk.Button(frame_buttons, text="Registrér fri", font=Font(size=12, weight="bold"), padx=40, pady=20, background="#f59725", foreground="White", command=lambda: self.controller.show_frame(NewDayOff))
@@ -690,16 +690,12 @@ class MainPage(tk.Frame):
             return {'flex': 0}  # Return default if no file exists
 
     def save_balances(self, balances):
-        # Convert all Decimal values in balances to float
-        # updated_balances = {k: float(v) if isinstance(v, Decimal) else v for k, v in balances.items()}
-        # with open(saldi_path, 'w') as file:
-        #     json.dump(updated_balances, file, indent=4)
-
         try:
             with open(saldi_path, 'w') as file:
                 json.dump(balances, file, indent=4)
         except Exception as e:
             print(f"Failed to save balances: {e}")
+
 
 
     def write_all_data(self, data):
@@ -743,6 +739,31 @@ class MainPage(tk.Frame):
                 })
 
         self.update_balances_and_refresh(flex_saldo, user_settings, balances)
+
+    def calculate_weekly_flex(self):
+        today = datetime.today()
+        monday = today - timedelta(days=today.weekday())  # Monday of this week
+        sunday = monday + timedelta(days=6)  # Sunday of this week
+
+        weekly_flex = Decimal('0')
+        balances = self.load_balances()
+        timesheet = self.read_all_data()  # This reads a JSON or similar format where each day's data is stored
+
+        for key, value in timesheet.items():
+            date = datetime.strptime(key, "%d-%m-%Y")
+            if monday <= date <= sunday:  # Now includes days until Sunday
+                start_time = datetime.strptime(value['Starttid'], '%H:%M')
+                end_time = datetime.strptime(value['Sluttid'], '%H:%M')
+                duration = end_time - start_time
+                arbejdstid_minutes = duration.seconds // 60
+                normtid = self.controller.hours_minutes_to_decimal(value['Normtid'])
+                daily_flex_minutes = arbejdstid_minutes - (normtid * 60)
+                weekly_flex += Decimal(daily_flex_minutes) / Decimal('60.0')
+
+        balances['flex_week'] = float(weekly_flex)
+        self.save_balances(balances)
+        return weekly_flex
+
 
     def get_normtid_decimal(self, user_settings):
         # Handles the parsing of 'HoursPerDay'
@@ -888,17 +909,16 @@ class MainPage(tk.Frame):
                 json.dump({'flex': 0}, file)  # Create with base value if not found
 
     def load_flexhours_to_widget(self):
-
-
         self.config = self.controller.load_user_saldi()
 
         flex_total = self.config.get("flex", 'Fejl')
-        if not flex_total == 'Fejl':
+        if flex_total != 'Fejl':
             flex_total = self.controller.decimal_to_hours_minutes(flex_total)
         self.label_flex_total.config(text=f"Flex i alt: {flex_total}")
 
-        # flex_week = self.config.get("flex_week", 'Fejl')
-        # self.label_flex_week.config(text=f"Flex i denne uge: {flex_week}")
+        flex_week = self.calculate_weekly_flex()  # Calculate or fetch the weekly flex time
+        flex_week_formatted = self.controller.decimal_to_hours_minutes(flex_week)  # Convert to readable format
+        self.label_flex_week.config(text=f"Flex i denne uge: {flex_week_formatted}")
 
 
 

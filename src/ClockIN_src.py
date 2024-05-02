@@ -701,14 +701,12 @@ class MainPage(tk.Frame):
         except Exception as e:
             print(f"Failed to save balances: {e}")
 
+
     def write_all_data(self, data):
         user_settings = self.controller.load_user_settings()
-        current_normtid_str = str(user_settings.get('HoursPerDay', '7.40'))  # Ensures a default value
+        use_avg_hours = user_settings.get('UseAvgWeekHoursAsDefault', False)
 
-        try:
-            current_normtid_decimal = Decimal(current_normtid_str) if ":" not in current_normtid_str else self.controller.hours_minutes_to_decimal(current_normtid_str)
-        except InvalidOperation:
-            current_normtid_decimal = Decimal('7.40')  # Fallback to a default if conversion fails
+        current_normtid_decimal = self.get_normtid_decimal(user_settings)
 
         flex_saldo = Decimal('0')
         balances = self.load_balances()
@@ -718,27 +716,23 @@ class MainPage(tk.Frame):
             writer.writeheader()
 
             for key, value in data.items():
+                date, selected_day = self.get_date_and_day_from_key(key)
+                normtid_at_entry = self.get_daily_norm(selected_day, use_avg_hours, user_settings, current_normtid_decimal)
+
                 start_time = datetime.strptime(value['Starttid'], '%H:%M')
                 end_time = datetime.strptime(value['Sluttid'], '%H:%M')
                 duration = end_time - start_time
                 arbejdstid_minutes = duration.seconds // 60
-                arbejdstid = f"{arbejdstid_minutes // 60:02}:{arbejdstid_minutes % 60:02}"
-
-                normtid_at_entry_str = value.get('Normtid', str(current_normtid_decimal))
-                try:
-                    normtid_at_entry = Decimal(normtid_at_entry_str)
-                except InvalidOperation:
-                    normtid_at_entry = current_normtid_decimal  # Fallback to current norm if conversion fails
 
                 daily_flex_minutes = arbejdstid_minutes - (normtid_at_entry * 60)
                 daily_flex_hours = Decimal(daily_flex_minutes) / Decimal('60.0')
-                flex_saldo += daily_flex_hours  # Accumulate flex saldo
+                flex_saldo += daily_flex_hours
 
                 writer.writerow({
                     'Dato': key,
                     'Starttid': value['Starttid'],
                     'Sluttid': value['Sluttid'],
-                    'Arbejdstid': arbejdstid,
+                    'Arbejdstid': f"{arbejdstid_minutes // 60:02}:{arbejdstid_minutes % 60:02}",
                     'Normtid': self.controller.decimal_to_hours_minutes(normtid_at_entry),
                     'Flex saldo': self.controller.decimal_to_hours_minutes(flex_saldo),
                     'Flex forbrug': '',
@@ -748,14 +742,106 @@ class MainPage(tk.Frame):
                     'Seniordage forbrug': ''
                 })
 
-        # Recalculate flex bias and update saldo
+        self.update_balances_and_refresh(flex_saldo, user_settings, balances)
+
+    def get_normtid_decimal(self, user_settings):
+        # Handles the parsing of 'HoursPerDay'
+        normtid_str = str(user_settings.get('HoursPerDay', '7.40'))
+        try:
+            return Decimal(normtid_str) if ":" not in normtid_str else self.controller.hours_minutes_to_decimal(normtid_str)
+        except InvalidOperation:
+            return Decimal('7.40')  # Fallback
+
+    def get_daily_norm(self, selected_day, use_avg_hours, user_settings, current_normtid_decimal):
+        if use_avg_hours:
+            return current_normtid_decimal
+        else:
+            work_hours = user_settings.get('WorkHours', {})
+            day_hours_str = work_hours.get(selected_day, {}).get('Total', None)
+            if day_hours_str:
+                return self.controller.hours_minutes_to_decimal(day_hours_str)
+            else:
+                return current_normtid_decimal  # Fallback if no specific hours are found
+
+    def update_balances_and_refresh(self, flex_saldo, user_settings, balances):
         flex_bias_str = user_settings.get('Bias', {}).get('Flex', '0')
         flex_bias = Decimal(self.controller.hours_minutes_to_decimal(flex_bias_str)) if ":" in flex_bias_str else Decimal(flex_bias_str)
-        final_flex_saldo = flex_saldo + flex_bias  # Addition of two Decimals
+        final_flex_saldo = flex_saldo + flex_bias
 
-        balances['flex'] = float(final_flex_saldo)  # Ensure flex_saldo is updated in balances
+        balances['flex'] = float(final_flex_saldo)
         self.save_balances(balances)
-        self.load_flexhours_to_widget()  # Refresh the displayed flex hours
+        self.load_flexhours_to_widget()
+
+    def get_date_and_day_from_key(self, key):
+        date = datetime.strptime(key, "%d-%m-%Y")
+        day_of_week = date.weekday()
+        days = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"]
+        selected_day = days[day_of_week] if day_of_week < len(days) else None
+        return date.strftime("%d-%m-%Y"), selected_day
+
+
+
+
+
+    # def write_all_data(self, data):
+    #     user_settings = self.controller.load_user_settings()
+    #     current_normtid_str = str(user_settings.get('HoursPerDay', '7.40'))  # Ensures a default value
+
+    #     try:
+    #         current_normtid_decimal = Decimal(current_normtid_str) if ":" not in current_normtid_str else self.controller.hours_minutes_to_decimal(current_normtid_str)
+    #     except InvalidOperation:
+    #         current_normtid_decimal = Decimal('7.40')  # Fallback to a default if conversion fails
+
+    #     flex_saldo = Decimal('0')
+    #     balances = self.load_balances()
+
+    #     with open(timesheet_path, mode='w', newline='') as file:
+    #         writer = csv.DictWriter(file, fieldnames=sheet_headers, delimiter=';')
+    #         writer.writeheader()
+
+    #         for key, value in data.items():
+    #             start_time = datetime.strptime(value['Starttid'], '%H:%M')
+    #             end_time = datetime.strptime(value['Sluttid'], '%H:%M')
+    #             duration = end_time - start_time
+    #             arbejdstid_minutes = duration.seconds // 60
+    #             arbejdstid = f"{arbejdstid_minutes // 60:02}:{arbejdstid_minutes % 60:02}"
+
+    #             normtid_at_entry_str = value.get('Normtid', str(current_normtid_decimal))
+    #             try:
+    #                 normtid_at_entry = Decimal(normtid_at_entry_str)
+    #             except InvalidOperation:
+    #                 normtid_at_entry = current_normtid_decimal  # Fallback to current norm if conversion fails
+
+
+
+    #             daily_flex_minutes = arbejdstid_minutes - (normtid_at_entry * 60) # This is where the amout of flex for the entered date is calculated using normtid_at_entry
+
+
+    #             daily_flex_hours = Decimal(daily_flex_minutes) / Decimal('60.0')
+    #             flex_saldo += daily_flex_hours  # Accumulate flex saldo
+
+    #             writer.writerow({
+    #                 'Dato': key,
+    #                 'Starttid': value['Starttid'],
+    #                 'Sluttid': value['Sluttid'],
+    #                 'Arbejdstid': arbejdstid,
+    #                 'Normtid': self.controller.decimal_to_hours_minutes(normtid_at_entry),
+    #                 'Flex saldo': self.controller.decimal_to_hours_minutes(flex_saldo),
+    #                 'Flex forbrug': '',
+    #                 'Ferie forbrug': '',
+    #                 '6. Ferieuge forbrug': '',
+    #                 'Omsorgsdage forbrug': '',
+    #                 'Seniordage forbrug': ''
+    #             })
+
+    #     # Recalculate flex bias and update saldo
+    #     flex_bias_str = user_settings.get('Bias', {}).get('Flex', '0')
+    #     flex_bias = Decimal(self.controller.hours_minutes_to_decimal(flex_bias_str)) if ":" in flex_bias_str else Decimal(flex_bias_str)
+    #     final_flex_saldo = flex_saldo + flex_bias  # Addition of two Decimals
+
+    #     balances['flex'] = float(final_flex_saldo)  # Ensure flex_saldo is updated in balances
+    #     self.save_balances(balances)
+    #     self.load_flexhours_to_widget()  # Refresh the displayed flex hours
 
 
     def refresh_calendar(self):

@@ -1,5 +1,5 @@
 projectname = "ClockIN"
-version = "1.9.1 (Alpha)"
+version = "(Alpha)"
 
 
 import tkinter as tk
@@ -697,13 +697,10 @@ class MainPage(tk.Frame):
             print(f"Failed to save balances: {e}")
 
 
-
     def write_all_data(self, data):
         user_settings = self.controller.load_user_settings()
         use_avg_hours = user_settings.get('UseAvgWeekHoursAsDefault', False)
-
         current_normtid_decimal = self.get_normtid_decimal(user_settings)
-
         flex_saldo = Decimal('0')
         balances = self.load_balances()
 
@@ -713,16 +710,26 @@ class MainPage(tk.Frame):
 
             for key, value in data.items():
                 date, selected_day = self.get_date_and_day_from_key(key)
-                normtid_at_entry = self.get_daily_norm(selected_day, use_avg_hours, user_settings, current_normtid_decimal)
+                date_object = datetime.strptime(key, "%d-%m-%Y")
 
-                start_time = datetime.strptime(value['Starttid'], '%H:%M')
-                end_time = datetime.strptime(value['Sluttid'], '%H:%M')
-                duration = end_time - start_time
-                arbejdstid_minutes = duration.seconds // 60
+                # Initialize variables outside the conditional scope for use in writing to CSV
+                normtid_at_entry = Decimal('0')
+                arbejdstid_minutes = 0
 
-                daily_flex_minutes = arbejdstid_minutes - (normtid_at_entry * 60)
-                daily_flex_hours = Decimal(daily_flex_minutes) / Decimal('60.0')
-                flex_saldo += daily_flex_hours
+                if date_object.weekday() < 5:  # Process if the day is a weekday
+                    normtid_at_entry = self.get_daily_norm(selected_day, use_avg_hours, user_settings, current_normtid_decimal)
+                    start_time = datetime.strptime(value['Starttid'], '%H:%M')
+                    end_time = datetime.strptime(value['Sluttid'], '%H:%M')
+                    duration = end_time - start_time
+                    arbejdstid_minutes = duration.seconds // 60
+                    daily_flex_minutes = arbejdstid_minutes - (normtid_at_entry * 60)
+                    daily_flex_hours = Decimal(daily_flex_minutes) / Decimal('60.0')
+                    flex_saldo += daily_flex_hours
+                else:
+                    start_time = datetime.strptime(value['Starttid'], '%H:%M')
+                    end_time = datetime.strptime(value['Sluttid'], '%H:%M')
+                    duration = end_time - start_time
+                    arbejdstid_minutes = duration.seconds // 60
 
                 writer.writerow({
                     'Dato': key,
@@ -740,25 +747,37 @@ class MainPage(tk.Frame):
 
         self.update_balances_and_refresh(flex_saldo, user_settings, balances)
 
+    def get_date_and_day_from_key(self, key):
+        date = datetime.strptime(key, "%d-%m-%Y")
+        day_of_week = date.weekday()
+        days = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"]
+        selected_day = days[day_of_week] if day_of_week < len(days) else None
+        return date.strftime("%d-%m-%Y"), selected_day
+
     def calculate_weekly_flex(self):
         today = datetime.today()
-        monday = today - timedelta(days=today.weekday())  # Monday of this week
-        sunday = monday + timedelta(days=6)  # Sunday of this week
+        monday = today - timedelta(days=today.weekday())
+        sunday = monday + timedelta(days=6)
 
         weekly_flex = Decimal('0')
         balances = self.load_balances()
-        timesheet = self.read_all_data()  # This reads a JSON or similar format where each day's data is stored
+        timesheet = self.read_all_data()
 
         for key, value in timesheet.items():
             date = datetime.strptime(key, "%d-%m-%Y")
-            if monday <= date <= sunday:  # Now includes days until Sunday
-                start_time = datetime.strptime(value['Starttid'], '%H:%M')
-                end_time = datetime.strptime(value['Sluttid'], '%H:%M')
-                duration = end_time - start_time
-                arbejdstid_minutes = duration.seconds // 60
-                normtid = self.controller.hours_minutes_to_decimal(value['Normtid'])
-                daily_flex_minutes = arbejdstid_minutes - (normtid * 60)
-                weekly_flex += Decimal(daily_flex_minutes) / Decimal('60.0')
+            if monday <= date <= sunday:
+                if date.weekday() < 5:  # Checks if it's a weekday (Monday=0, Sunday=6)
+                    start_time = datetime.strptime(value['Starttid'], '%H:%M')
+                    end_time = datetime.strptime(value['Sluttid'], '%H:%M')
+                    duration = end_time - start_time
+                    arbejdstid_minutes = duration.seconds // 60
+                    normtid = self.controller.hours_minutes_to_decimal(value['Normtid'])
+                    daily_flex_minutes = arbejdstid_minutes - (normtid * 60)
+                    weekly_flex += Decimal(daily_flex_minutes) / Decimal('60.0')
+                else:
+                    # Handle weekend work, possibly as overtime or ignore for flex
+                    # Example: Add to a separate overtime tally if needed
+                    continue
 
         balances['flex_week'] = float(weekly_flex)
         self.save_balances(balances)
@@ -837,19 +856,26 @@ class MainPage(tk.Frame):
 
     def save_times(self):
         # Called when 'save' is clicked in the calendar.
-        date, selected_day = self.get_date_and_day()
+        date, selected_day = self.get_date_and_day()  # Assuming this returns the selected date in "%d-%m-%Y" format and the day name
+        date_object = datetime.strptime(date, "%d-%m-%Y")  # Convert the date string back to a datetime object for weekday checking
+
+        # Check if the saved time is on a weekend
+        if date_object.weekday() >= 5:  # 5 for Saturday, 6 for Sunday
+            messagebox.showinfo("Weekend", "Du har indberettet arbejdstid i en weekend. Dette bliver gemt men tagets ikke med i beregninger af fx. flex.")
+
+        # Process the time entries
         clock_in_time = self.format_time(self.clock_in_picker.time())
         clock_out_time = self.format_time(self.clock_out_picker.time())
 
+        # Read existing data, update with new entry, and save
         all_data = self.read_all_data()
         all_data[date] = {'Starttid': clock_in_time, 'Sluttid': clock_out_time}
         
-        self.reset_flex_saldo()  # Reset flex saldo to initial state
-        self.write_all_data(all_data)  # Recalculate new flex saldo
+        self.reset_flex_saldo()  # Reset flex saldo to initial state before recalculating
+        self.write_all_data(all_data)  # Write data to file and recalculate flex saldo
 
         self.times_data = all_data  # Reload data to reflect changes
-        self.refresh_calendar()  # Refresh UI components
-
+        self.refresh_calendar()  # Refresh UI components to show updated data
     def clear_times(self):
         # Get the current selected date and day from the calendar
         date, selected_day = self.get_date_and_day()
@@ -995,10 +1021,6 @@ class SaldiPage(tk.Frame):
             messagebox.showerror("Fejl", "Error decoding JSON from saldi file.")
             print("Error decoding JSON from saldi file.")
             exit()
-
-
-
-
 
 
 class ReportPage(tk.Frame):

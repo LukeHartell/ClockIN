@@ -614,15 +614,21 @@ class MainPage(tk.Frame):
         self.on_date_select(None)  # Set initial values for pickers
 
     def on_date_select(self, event):
-        settings = self.controller.load_user_settings()  # Load settings from JSON
+        # Called when a date is clicked in the calendar
+        settings = self.controller.load_user_settings()
+        date, selected_day = self.get_date_and_day()
+
+        self.update_time_entries(date, settings, selected_day)
+
+    def get_date_and_day(self):
         date = self.calendar.selection_get().strftime("%d-%m-%Y")
         day_of_week = datetime.strptime(date, "%d-%m-%Y").weekday()
         days = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"]
         selected_day = days[day_of_week] if day_of_week < len(days) else None
+        return date, selected_day
 
-        # Default times if no specific or default time available
+    def update_time_entries(self, date, settings, selected_day):
         default_time = "00:00"
-
         if date in self.times_data:
             clock_in, clock_out = self.times_data[date]['Starttid'], self.times_data[date]['Sluttid']
         elif settings["UseNormalHoursAsDefault"] and selected_day in settings["WorkHours"]:
@@ -631,7 +637,9 @@ class MainPage(tk.Frame):
         else:
             clock_in, clock_out = default_time, default_time
 
-        # Validate and parse time entries
+        self.set_time_pickers(clock_in, clock_out)
+
+    def set_time_pickers(self, clock_in, clock_out):
         clock_in_hour, clock_in_minute = self.validate_and_parse_time(clock_in)
         clock_out_hour, clock_out_minute = self.validate_and_parse_time(clock_out)
 
@@ -786,46 +794,44 @@ class MainPage(tk.Frame):
         return "{:02}:{:02}".format(time_tuple[0], time_tuple[1])
 
     def save_times(self):
-        date = self.calendar.selection_get().strftime("%d-%m-%Y")
+        # Called when 'save' is clicked in the calendar.
+        date, selected_day = self.get_date_and_day()
         clock_in_time = self.format_time(self.clock_in_picker.time())
         clock_out_time = self.format_time(self.clock_out_picker.time())
 
-        # Read the current data and calculate flex saldo afresh
         all_data = self.read_all_data()
         all_data[date] = {'Starttid': clock_in_time, 'Sluttid': clock_out_time}
+        
+        self.reset_flex_saldo()  # Reset flex saldo to initial state
+        self.write_all_data(all_data)  # Recalculate new flex saldo
 
-        # Reset the flex saldo to initial state before recalculating
-        self.reset_flex_saldo()  # This method will handle resetting the flex saldo to the base value
-
-        # Write data and recalculate new flex saldo
-        self.write_all_data(all_data)
-
-        # Reload data to reflect changes
-        self.times_data = self.read_all_data()
-
-        # Refresh UI components like calendar to show new states
-        self.refresh_calendar()
+        self.times_data = all_data  # Reload data to reflect changes
+        self.refresh_calendar()  # Refresh UI components
 
     def clear_times(self):
-        date = self.calendar.selection_get().strftime("%d-%m-%Y")
-        day_of_week = datetime.strptime(date, "%d-%m-%Y").weekday()
-        days = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"]
-        selected_day = days[day_of_week] if day_of_week < len(days) else None
+        # Get the current selected date and day from the calendar
+        date, selected_day = self.get_date_and_day()
         settings = self.controller.load_user_settings()
 
-        # Check if the date exists in the times data and remove it
+        # Remove the date's data if it exists and update data storage
         if date in self.times_data:
             del self.times_data[date]
             self.write_all_data(self.times_data)  # Recalculate after clearing the data
             self.refresh_calendar()
 
-        # Reset the clock pickers to the default or specific times if set in settings
+        # Set the clock pickers to default or specific times based on settings
+        self.set_default_times(selected_day, settings)
+
+        # Update the flex hours display widget to show the new total after changes
+        self.load_flexhours_to_widget()
+
+    def set_default_times(self, selected_day, settings):
+        default_time = "00:00"
         if settings["UseNormalHoursAsDefault"] and selected_day and selected_day in settings["WorkHours"]:
-            clock_in = settings["WorkHours"][selected_day].get("From", "00:00")
-            clock_out = settings["WorkHours"][selected_day].get("To", "00:00")
+            clock_in = settings["WorkHours"][selected_day].get("From", default_time)
+            clock_out = settings["WorkHours"][selected_day].get("To", default_time)
         else:
-            clock_in = "00:00"
-            clock_out = "00:00"
+            clock_in, clock_out = default_time, default_time
 
         # Parse times and set clock pickers
         clock_in_hour, clock_in_minute = map(int, clock_in.split(':'))
@@ -834,9 +840,6 @@ class MainPage(tk.Frame):
         self.clock_in_picker.setMinutes(clock_in_minute)
         self.clock_out_picker.setHours(clock_out_hour)
         self.clock_out_picker.setMinutes(clock_out_minute)
-
-        # Update the flex hours display widget to show the new total after changes
-        self.load_flexhours_to_widget()
 
 
 

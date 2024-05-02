@@ -2,27 +2,6 @@ projectname = "ClockIN"
 version = "1.9.1 (Alpha)"
 
 
-"""
-
-Note to self:
-1
-Når man ændrer bias i indstillinger og derefter går tilbage til kalender view, står saldo som 100 timer.
-Jeg har ikke tjekket om dette kommer fra saldo fil eller fra variabler i flowet.
-
-Så snart man tilføjer eller fjerner en dag fra kalenderen opdateres saldo til at passe perfekt igen.
-
-2
-Hvis man fjerner sin flex-bias, så får man en fejl i consollen. Man bliver nødt til at skrive 0 i feltet.
-Dette burde kunne rettes med en default value, hvis feltet er tomt.
-
-
-3
-Beregn flex ud fra normtid frem for dagligt gennemsnit
-
-
-"""
-
-
 import tkinter as tk
 from tkinter import messagebox
 import csv
@@ -99,6 +78,7 @@ danish_days = ("Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn")
 def get_default_settings():
     return {
         "UseNormalHoursAsDefault": False,
+        "UseAvgWeekHoursAsDefault": False,
         "WorkHours": {
             "Mandag": {"From": "08:00", "To": "15:45", "Total": "7:45"},
             "Tirsdag": {"From": "08:00", "To": "15:45", "Total": "7:45"},
@@ -136,7 +116,7 @@ class MainApplication(tk.Tk):
         super().__init__(*args, **kwargs)
         self.title(f"{projectname} - {version}")
         self.geometry('1000x700')
-        self.iconbitmap("logo.ico")
+        self.iconbitmap("assets/logo.ico")
         self.resizable(False, False)
 
         # Ensure the directories exist, and if not, create them
@@ -437,7 +417,7 @@ class MainApplication(tk.Tk):
             },
             "WorkHours": {day: (entry[0].get(), entry[1].get()) for day, entry in self.work_hours_entries.items()},
             "UseNormalHoursAsDefault": self.use_normal_hours_var.get(),
-            # Collect other settings as needed
+            "UseAvgWeekHoursAsDefault": self.use_avgWeekHours_var.get(),
         }
 
     def save_settings(self):
@@ -1023,7 +1003,7 @@ class NewDayOff(tk.Frame):
         date = self.date_entry.get()
         reason = self.reason_entry.get()
         if not date or not reason:
-            messagebox.showerror("Fejl", "Please fill in all fields.")
+            messagebox.showerror("Fejl", "Udfyld alle felter.")
             return
 
         # Here you might save the day off data to a file or database
@@ -1131,6 +1111,8 @@ class SettingsPage(tk.Frame):
             self.work_hours_entries[day] = (from_entry, to_entry)
         self.use_normal_hours_var = tk.BooleanVar()
         self.use_normal_hours_var.set(False)  # Default value
+        self.use_avgWeekHours_var = tk.BooleanVar()
+        self.use_avgWeekHours_var.set(False)  # Default value
 
         self.hours_label = tk.Label(self, text="Svarende til 37 timer/uge", font=Font(weight="bold"))
         self.hours_label.grid(row=14, column=1, columnspan=2, sticky="w", padx=25)
@@ -1138,14 +1120,17 @@ class SettingsPage(tk.Frame):
         use_normal_hours_checkbox = tk.Checkbutton(self, text="Brug normaltider som standard i kalenderen", variable=self.use_normal_hours_var, onvalue=True, offvalue=False)
         use_normal_hours_checkbox.grid(row=19, column=1, sticky="w", columnspan=2)
 
+        use_avgWeekHours_checkbox = tk.Checkbutton(self, text="Brug gennemsnit til beregning af flex", variable=self.use_avgWeekHours_var, onvalue=True, offvalue=False)
+        use_avgWeekHours_checkbox.grid(row=20, column=1, sticky="w", columnspan=2)
+
         
         # Children section
-        tk.Label(self, text="Børn:", font=Font(weight="bold"), background="#009687", foreground="White").grid(row=20, column=0, sticky="w", padx=25, pady=7)
-        tk.Label(self, text="(Denne information bruges til beregning af omsorgsdage)").grid(row=21, column=0, sticky="w", padx=25, columnspan=4)
+        tk.Label(self, text="Børn:", font=Font(weight="bold"), background="#009687", foreground="White").grid(row=21, column=0, sticky="w", padx=25, pady=7)
+        tk.Label(self, text="(Denne information bruges til beregning af omsorgsdage)").grid(row=22, column=0, sticky="w", padx=25, columnspan=4)
         self.children_listbox = tk.Listbox(self)
-        self.children_listbox.grid(row=22, column=0, columnspan=3, sticky="ew", padx=25)
-        tk.Button(self, text="Tilføj barn", padx=60, command=self.add_child).grid(row=23, column=0, padx=25)
-        tk.Button(self, text="Fjern valgte", padx=65, command=self.remove_selected_child).grid(row=23, column=1, columnspan=2)
+        self.children_listbox.grid(row=23, column=0, columnspan=3, sticky="ew", padx=25)
+        tk.Button(self, text="Tilføj barn", padx=60, command=self.add_child).grid(row=24, column=0, padx=25)
+        tk.Button(self, text="Fjern valgte", padx=65, command=self.remove_selected_child).grid(row=24, column=1, columnspan=2)
         
         # Save Button with updated command to recalculate saldi
         tk.Button(self, text="Gem indstillinger", font=Font(weight="bold"), padx=20, command=self.save_and_recalculate_saldi, background='#009687', foreground='white').grid(row=25, column=0, padx=25, pady=50)
@@ -1196,16 +1181,55 @@ class SettingsPage(tk.Frame):
             "Seniorday": self.bias_seniorday.get()
         }
 
+
+
+
         # Update working hours
+        # Iterate through each day and its associated from/to time entries
         for day, (from_entry, to_entry) in self.work_hours_entries.items():
-            self.config["WorkHours"][day] = {"From": from_entry.get(), "To": to_entry.get()}
+            # Parse the "From" and "To" time string to a datetime object
+            from_time = datetime.strptime(from_entry.get(), '%H:%M')
+            to_time = datetime.strptime(to_entry.get(), '%H:%M')
+            
+            # Check if the "To" time is before the "From" time, indicating the work crossed into the next day
+            if to_time < from_time:
+                # Display an error message if the "To" time is earlier than the "From" time
+                messagebox.showerror("Error", "Start time cannot be before end time.")
+            else:
+                # Calculate the time difference between "To" and "From"
+                total_duration = to_time - from_time
+                # Convert total duration to total hours in decimal
+                hours_in_decimal = total_duration.seconds / 3600
+
+                # Convert decimal hours to a formatted string "X hours Y minutes"
+                total_formatted = self.controller.decimal_to_hours_minutes(hours_in_decimal)
+
+                # Save the formatted duration along with the original "From" and "To" times in the configuration dictionary
+                self.config["WorkHours"][day] = {
+                    "From": from_entry.get(),
+                    "To": to_entry.get(),
+                    "Total": total_formatted
+                }
 
         # Save the checkbox state
         self.config["UseNormalHoursAsDefault"] = self.use_normal_hours_var.get()
+        self.config["UseAvgWeekHoursAsDefault"] = self.use_avgWeekHours_var.get()
+        
 
         # Save the configuration to a file
         with open(usersettings_path, "w") as file:
             json.dump(self.config, file, indent=4)
+
+
+        # Beregn timer per uge
+        timer_per_uge = self.controller.beregn_ugetimer()
+        self.config["HoursPerWeek"] = timer_per_uge
+        self.config["HoursPerDay"] = timer_per_uge/5
+
+        with open(usersettings_path, "w") as file:
+            json.dump(self.config, file, indent=4)
+
+
 
         # Check if critical settings have changed
         flex_bias_changed = old_flex_bias != self.bias_flex.get()
@@ -1246,6 +1270,7 @@ class SettingsPage(tk.Frame):
         
         # Set the checkbox according to the saved value
         self.use_normal_hours_var.set(self.config.get("UseNormalHoursAsDefault", False))
+        self.use_avgWeekHours_var.set(self.config.get("UseAvgWeekHoursAsDefault", False))
         
         if "Children" in self.config:
             for child in self.config["Children"]:

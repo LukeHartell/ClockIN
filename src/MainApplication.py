@@ -19,7 +19,7 @@ class MainApplication(tk.Tk):
         super().__init__(*args, **kwargs)
         self.title(f"{projectname} - {version}")
         self.geometry('1000x700')
-        self.iconbitmap("assets/logo.ico")
+        self.iconbitmap("../assets/logo.ico")
         self.resizable(False, False)
 
         # Ensure the directories exist, and if not, create them

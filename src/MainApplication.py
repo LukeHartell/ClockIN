@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import csv
 import os
+import sys
 import json
 from datetime import datetime, date
 
@@ -17,10 +18,20 @@ from utilities import timesheet_path, usersettings_path, saldi_path, projectname
 class MainApplication(tk.Tk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.title(f"{projectname} - {version}")
+        self.title("Your Application Title")
         self.geometry('1000x700')
-        self.iconbitmap("../assets/logo.ico")
         self.resizable(False, False)
+
+        # Set the icon path correctly depending on whether the app is frozen (packaged)
+        if getattr(sys, 'frozen', False):
+            # If the application is run as a bundled executable (using PyInstaller)
+            base_path = sys._MEIPASS
+        else:
+            # If the application is run in a development environment
+            base_path = os.path.dirname(__file__)
+
+        icon_path = os.path.join(base_path, 'assets', 'logo.ico')
+        self.iconbitmap(icon_path)
 
         # Ensure the directories exist, and if not, create them
         for file_path in [timesheet_path, usersettings_path, saldi_path]:

@@ -18,7 +18,7 @@ from utilities import timesheet_path, usersettings_path, saldi_path, projectname
 class MainApplication(tk.Tk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.title("Your Application Title")
+        self.title("ClockIN")
         self.geometry('1000x700')
         self.resizable(False, False)
 
@@ -30,8 +30,8 @@ class MainApplication(tk.Tk):
             # If the application is run in a development environment
             base_path = os.path.dirname(__file__)
 
-        icon_path = os.path.join(base_path, 'assets', 'logo.ico')
-        self.iconbitmap(icon_path)
+        # icon_path = os.path.join(base_path, 'assets', 'logo.ico')
+        # self.iconbitmap(icon_path)
 
         # Ensure the directories exist, and if not, create them
         for file_path in [timesheet_path, usersettings_path, saldi_path]:

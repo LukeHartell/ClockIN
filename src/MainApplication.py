@@ -56,6 +56,46 @@ class MainApplication(tk.Tk):
 
         #self.show_welcomemsg()
 
+        ###############################################
+        #       UI
+        ############################################### 
+
+    def show_welcomemsg(self):
+        messagebox.showinfo("Velkommen til ClockIN", "Med ClockIN kan du holde styr på mødetider, felx, ferie og meget andet.")
+
+    def show_frame(self, context):
+        '''Raise a frame to the top for display'''
+        frame = self.frames[context]
+        frame.tkraise()
+        # Check if the frame being shown is SaldiPage and call refresh if it is
+        if context == SaldiPage:
+            frame.refresh()
+        if context == MainPage:
+            frame.on_date_select(self)
+
+    def beregn_ugetimer(self):
+        loaded_settings = self.load_user_settings()
+        work_hours = loaded_settings['WorkHours']
+        hours_total = 0
+
+        for day in work_hours:
+            try:
+                # Parse the 'From' and 'To' times
+                time_format = "%H:%M"
+                from_time = datetime.strptime(work_hours[day]['From'], time_format)
+                to_time = datetime.strptime(work_hours[day]['To'], time_format)
+
+                # Calculate the duration in hours
+                duration = (to_time - from_time).seconds / 3600
+                hours_total += duration
+            except ValueError:
+                messagebox.showerror("Fejl", f"Forkert format for {day}. Tider skal skrives i samme format som følgende eksempeler: 12:00 eller 08:30")
+                # print(f"Error: Incorrect time format for {day}. Expected 'hh:mm'. Received From: {work_hours[day].get('From')} and To: {work_hours[day].get('To')}")
+                hours_total = 0
+                break
+
+        return hours_total
+
     def setup_frames_and_menu(self):
         container = tk.Frame(self)
         container.pack(side="top", fill="both", expand=True)
@@ -211,20 +251,6 @@ class MainApplication(tk.Tk):
 
         return initial_flex + flex_bias - flex_consumed  # Apply bias only once
 
-        # if (self.user_saldi.get('flex')):
-        #     T = float(self.user_saldi.get('flex'))
-        # else:
-        #     T = 0
-
-        # if (self.user_settings.get('Bias', {}).get('Flex')):
-        #     O = float(self.user_settings.get('Bias', {}).get('Flex'))
-        # else:
-        #     O = 0
-        # F = self.calculate_flex_consumption()
-        
-        # # Tjent + Opsparet - Forbrug
-        # return T + O - F
-
     def calculate_ferie_saldo(self):
         employment_date_str = self.user_settings.get('UserDetails', {}).get('EmploymentDate')
         M = self.calculate_months_since(employment_date_str)            # 
@@ -369,40 +395,6 @@ class MainApplication(tk.Tk):
 
 
 
-        ###############################################
-        #       UI
-        ############################################### 
-
-    def show_welcomemsg(self):
-        messagebox.showinfo("Velkommen til ClockIN", "Med ClockIN kan du holde styr på mødetider, felx, ferie og meget andet.")
-
-    def show_frame(self, context):
-        '''Raise a frame to the top for display'''
-        frame = self.frames[context]
-        frame.tkraise()
-
-    def beregn_ugetimer(self):
-        loaded_settings = self.load_user_settings()
-        work_hours = loaded_settings['WorkHours']
-        hours_total = 0
-
-        for day in work_hours:
-            try:
-                # Parse the 'From' and 'To' times
-                time_format = "%H:%M"
-                from_time = datetime.strptime(work_hours[day]['From'], time_format)
-                to_time = datetime.strptime(work_hours[day]['To'], time_format)
-
-                # Calculate the duration in hours
-                duration = (to_time - from_time).seconds / 3600
-                hours_total += duration
-            except ValueError:
-                messagebox.showerror("Fejl", f"Forkert format for {day}. Tider skal skrives i samme format som følgende eksempeler: 12:00 eller 08:30")
-                # print(f"Error: Incorrect time format for {day}. Expected 'hh:mm'. Received From: {work_hours[day].get('From')} and To: {work_hours[day].get('To')}")
-                hours_total = 0
-                break
-
-        return hours_total
     
 
 

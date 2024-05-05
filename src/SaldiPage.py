@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from tkinter.font import Font
 import json
 
@@ -10,81 +10,58 @@ class SaldiPage(tk.Frame):
         super().__init__(parent)
         self.controller = controller
 
-        # UI setup
-        tk.Label(self, text="Saldi Oversigt", font=('Helvetica', 16, 'bold')).pack(pady=(10, 5))
-        self.saldi_labels = {}
-        for saldo_type in ['flex', 'ferie', '6. ferieuge', 'omsorgsdage', 'seniordage']:
-            unit = 'dage' if saldo_type in ['omsorgsdage', 'seniordage'] else 'timer'
-            self.saldi_labels[saldo_type] = tk.Label(self, text=f"{saldo_type.capitalize()}: 0 {unit}", font=('Helvetica', 14))
-            self.saldi_labels[saldo_type].pack(pady=(5, 3))
+        tk.Label(self, text="Saldi Oversigt", font=('Helvetica', 32, 'bold')).pack(pady=(50, 25), fill='x', anchor='n')
 
-        # Button to manually refresh data
+        self.table_frame = tk.Frame(self)
+        self.table_frame.pack(pady=(5, 10), padx=(100, 100), fill='x', anchor='n')
+
+        # Button for manuel update. Disabled as the page updates on laod.
         # tk.Button(self, text="Opdatér", font=Font(weight="bold"), padx=20, command=self.refresh, background='#009687', foreground='white').pack(pady=(10, 5))
 
-        # Initial data load
         self.controller.calculate_saldi()
-        self.refresh()  # Make sure this is called after calculate_saldi()
-
-
-
-    def load_and_display_saldi(self):
-        """Load saldi from JSON and display it on labels."""
-        self.controller.calculate_saldi()  # Calculate saldi
-        try:
-            with open(saldi_path, 'r') as file:
-                saldi_data = json.load(file)
-                for saldo_type, label in self.saldi_labels.items():
-                    saldo = saldi_data.get(saldo_type, "0:00" if saldo_type in ["omsorgsdage", "seniordage"] else "0")
-                    if saldo_type in ["omsorgsdage", "seniordage"]:
-                        label.config(text=f"{saldo_type.capitalize()}: {saldo} dage")
-                    else:
-                        # Apply the conversion to all types except 'omsorgsdage' and 'seniordage'
-                        saldo = self.controller.decimal_to_hours_minutes(saldo)
-                        label.config(text=f"{saldo_type.capitalize()}: {saldo}")
-        except FileNotFoundError as e:
-            messagebox.showerror("Fejl", f"Failed to load saldi data: {str(e)}")
-        except json.JSONDecodeError as e:
-            messagebox.showerror("Fejl", f"Failed to decode saldi data: {str(e)}")
-
-
-
-
-    # def load_and_display_saldi(self):
-    #     """Load saldi from JSON and display it on labels."""
-    #     self.controller.calculate_saldi()
-    #     try:
-    #         with open(saldi_path, 'r') as file:
-    #             saldi_data = json.load(file)
-    #             for saldo_type, label in self.saldi_labels.items():
-    #                 saldo = saldi_data.get(saldo_type, "0:00")
-    #                 if saldo_type in ["omsorgsdage", "seniordage"]:
-    #                     label.config(text=f"{saldo_type.capitalize()}: {saldo} dage")
-    #                 else:
-    #                     saldo = self.controller.decimal_to_hours_minutes(saldo)
-    #                     label.config(text=f"{saldo_type.capitalize()}: {saldo}")
-    #     except FileNotFoundError:
-    #         messagebox.showerror("Fejl", "Failed to load saldi data. Saldi file not found.")
-    #         print("Failed to load saldi data. Saldi file not found.")
-    #         exit()
-    #     except json.JSONDecodeError:
-    #         messagebox.showerror("Fejl", "Failed to decode saldi data. JSON format error.")
-    #         print("Failed to decode saldi data. JSON format error.")
-    #         exit()
+        self.refresh()
 
     def refresh(self):
         """Load the saldo from saldi.json and update the display."""
+        # Clear previous rows if any
+        for widget in self.table_frame.winfo_children():
+            widget.destroy()
+
+        # Re-create header labels., 
+        tk.Label(self.table_frame, text="Saldotype", bg="#009687", fg="white", font=('Helvetica', 15, 'bold'), anchor='w').grid(row=0, column=0, sticky='ew')
+        tk.Label(self.table_frame, text="Til rådighed", bg="#009687", fg="white", font=('Helvetica', 15, 'bold'), anchor='w').grid(row=0, column=1, sticky='ew')
+
         try:
             with open(saldi_path, 'r') as file:
                 saldi = json.load(file)
-            for saldo_type, label in self.saldi_labels.items():
-                saldo = saldi.get(saldo_type, "0:00" if saldo_type in ["omsorgsdage", "seniordage"] else "0")
-                if saldo_type in ["omsorgsdage", "seniordage"]:
-                    label.config(text=f"{saldo_type.capitalize()}: {saldo} dage")
-                else:
-                    saldo = self.controller.decimal_to_hours_minutes(saldo)
-                    label.config(text=f"{saldo_type.capitalize()}: {saldo}")
+            for i, (saldo_type, amount) in enumerate(saldi.items()):
+                # Skip certain types of saldo data
+                if saldo_type == "flex_week":
+                    continue
+
+                row_color = "#F6F6F6" if i % 2 == 0 else "#E8E8E8"
+                tipo = tk.Label(self.table_frame, text=saldo_type.capitalize(), bg=row_color, font=('Helvetica', 13), width=70, anchor='w')
+                unit = 'dage' if saldo_type in ['omsorgsdage', 'seniordage'] else 'timer'
+                formatted_amount = f"{self.controller.decimal_to_hours_minutes(amount)} {unit}" if saldo_type not in ['omsorgsdage', 'seniordage'] else f"{amount} {unit}"
+                amount_label = tk.Label(self.table_frame, text=formatted_amount, bg=row_color, font=('Helvetica', 13), width=15, anchor='w', justify='right')
+                tipo.grid(row=i+1, column=0, sticky='ew')
+                amount_label.grid(row=i+1, column=1, sticky='ew')
         except FileNotFoundError as e:
             messagebox.showerror("Fejl", f"Saldi file not found: {str(e)}")
         except json.JSONDecodeError as e:
             messagebox.showerror("Fejl", f"Error decoding JSON from saldi file: {str(e)}")
 
+
+
+
+
+
+    def create_table_rows(self, parent):
+        # Placeholder labels for table rows
+        for i in range(5):
+            row_color = "#F6F6F6" if i % 2 == 0 else "#E8E8E8"
+            tipo = tk.Label(parent, text="", bg=row_color, font=('Helvetica', 13), width=70, anchor='w')
+            amount = tk.Label(parent, text="", bg=row_color, font=('Helvetica', 13), width=15, anchor='w', justify='right')
+            tipo.grid(row=i+1, column=0, sticky='ew')
+            amount.grid(row=i+1, column=1, sticky='ew')
+            self.rows.append((tipo, amount))

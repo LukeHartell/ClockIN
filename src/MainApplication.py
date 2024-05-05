@@ -18,7 +18,7 @@ from utilities import timesheet_path, usersettings_path, saldi_path, projectname
 class MainApplication(tk.Tk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.title("ClockIN")
+        self.title(f"{projectname} {version}")
         self.geometry('1000x700')
         self.resizable(False, False)
 
@@ -52,7 +52,7 @@ class MainApplication(tk.Tk):
         self.setup_frames_and_menu()
 
         # Calculate all saldi after the frames are setup
-        self.calculate_saldi()
+        # self.calculate_saldi()
 
         #self.show_welcomemsg()
 
@@ -90,7 +90,7 @@ class MainApplication(tk.Tk):
                 hours_total += duration
             except ValueError:
                 messagebox.showerror("Fejl", f"Forkert format for {day}. Tider skal skrives i samme format som følgende eksempeler: 12:00 eller 08:30")
-                # print(f"Error: Incorrect time format for {day}. Expected 'hh:mm'. Received From: {work_hours[day].get('From')} and To: {work_hours[day].get('To')}")
+                # # print(f"Error: Incorrect time format for {day}. Expected 'hh:mm'. Received From: {work_hours[day].get('From')} and To: {work_hours[day].get('To')}")
                 hours_total = 0
                 break
 
@@ -138,22 +138,36 @@ class MainApplication(tk.Tk):
         Calculate all saldi, applying biases correctly and ensuring no duplication in bias application.
         This method is called whenever changes require saldi recalculation.
         """
-        current_saldi = self.load_user_saldi()  # Load current saldi without bias applied
+        # print("Starting saldi calculation...")
+        self.user_settings = self.load_user_settings()  # Reload settings to ensure they are up-to-date
+        # print("Current settings being used:", self.user_settings)  # Show current settings
+
+        # Now extract biases and show them
         biases = self.user_settings.get('Bias', {})
+        # print("Biases fetched for calculation:", biases)
 
-        # Apply biases correctly
-        flex_bias = biases.get('Flex', "0:00")
-        flex_bias = self.hours_minutes_to_decimal(flex_bias)
+        # Proceed with extracting specific biases and calculation
+        flex_bias = self.hours_minutes_to_decimal(biases.get('Flex', "0:00"))
+        # print("Flex Bias after conversion:", flex_bias)
 
-        self.saldi['flex'] = current_saldi['flex'] + float(flex_bias) - self.calculate_flex_consumption()
+        # Calculate each type of saldo
+        self.saldi['flex'] = self.calculate_flex_saldo()
         self.saldi['ferie'] = self.calculate_ferie_saldo()
         self.saldi['6. ferieuge'] = self.calculate_sjette_ferieuge_saldo()
         self.saldi['omsorgsdage'] = self.calculate_omsorgsdage_saldo()
         self.saldi['seniordage'] = self.calculate_seniordage_saldo()
 
+        # Log calculated saldi
+        # print("Calculated saldi:", self.saldi)
+
+        # Save and refresh UI if necessary
         self.save_saldi(self.saldi)
         if SaldiPage in self.frames:
             self.frames[SaldiPage].refresh()
+        # print("Saldi calculation completed and UI refreshed (if applicable).")
+
+
+
 
     def calculate_months_since(self, employment_date_str):
         employment_date = datetime.strptime(employment_date_str, "%d-%m-%Y").date()
@@ -162,75 +176,6 @@ class MainApplication(tk.Tk):
         current_date = date.today()
         return (current_date.year - start_date.year) * 12 + (current_date.month - start_date.month) + 1
 
-
-
-        ###############################################
-        #       Udregn forbrug af typer
-        ###############################################
-
-
-
-    def calculate_flex_consumption(self):
-        current_year = datetime.now().year
-        total_consumption = 0
-        try:
-            with open(timesheet_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile, delimiter=';')
-                for row in reader:
-                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
-                        if (row.get('Flex forbrug')):
-                            total_consumption += float(row.get('Flex forbrug', 0))
-        except Exception as e:
-            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
-            print(f"Error processing timesheet: {e}")
-        return total_consumption
-
-    def calculate_ferie_consumption(self):
-        current_year = datetime.now().year
-        total_consumption = 0
-        try:
-            with open(timesheet_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile, delimiter=';')
-                for row in reader:
-                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
-                        if (row.get('Ferie forbrug')):
-                            total_consumption += float(row.get('Ferie forbrug', 0))
-        except Exception as e:
-            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
-            print(f"Error processing timesheet: {e}")
-        return total_consumption
-
-    def calculate_careday_consumption(self):
-        current_year = datetime.now().year
-        total_consumption = 0
-        try:
-            with open(timesheet_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile, delimiter=';')
-                for row in reader:
-                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
-                        if (row.get('Omsorgsdage forbrug')):
-                            total_consumption += float(row.get('Omsorgsdage forbrug', 0))
-        except Exception as e:
-            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
-            print(f"Error processing timesheet: {e}")
-        return total_consumption
-    
-    def calculate_seniorday_consumption(self):
-        current_year = datetime.now().year
-        total_consumption = 0
-        try:
-            with open(timesheet_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile, delimiter=';')
-                for row in reader:
-                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
-                        if (row.get('Seniordage forbrug')):
-                            total_consumption += float(row.get('Seniordage forbrug', 0))
-        except Exception as e:
-            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
-            print(f"Error processing timesheet: {e}")
-        return total_consumption
-
-
         ###############################################
         #       Udregn saldo af typer
         ###############################################
@@ -238,18 +183,18 @@ class MainApplication(tk.Tk):
 
 
     def calculate_flex_saldo(self):
-        # udregning af flex
-
-        """
-        Specifically handle flex saldo calculation, ensuring no repeated bias application.
-        """
-        initial_flex = self.load_user_saldi().get('flex', 0)  # Load the initial flex saldo
-        flex_bias = float(self.user_settings.get('Bias', {}).get('Flex', 0))
-        flex_bias = self.controller.hours_minutes_to_decimal(flex_bias)
-
+        initial_flex = self.load_user_saldi().get('flex', 0)  # Fallback to 0 if missing
+        flex_bias_setting = self.user_settings.get('Bias', {}).get('Flex', "0:00")
+        flex_bias_decimal = self.hours_minutes_to_decimal(flex_bias_setting)
         flex_consumed = self.calculate_flex_consumption()
 
-        return initial_flex + flex_bias - flex_consumed  # Apply bias only once
+        new_flex_saldo = initial_flex + flex_bias_decimal - flex_consumed
+
+        print(f"Initial Flex: {initial_flex}, + Bias: {flex_bias_decimal}, - Consumed: {flex_consumed}, New Flex: {new_flex_saldo} <------------")
+
+        return new_flex_saldo
+
+
 
     def calculate_ferie_saldo(self):
         employment_date_str = self.user_settings.get('UserDetails', {}).get('EmploymentDate')
@@ -334,6 +279,75 @@ class MainApplication(tk.Tk):
 
 
         ###############################################
+        #       Udregn forbrug af typer
+        ###############################################
+
+
+
+    def calculate_flex_consumption(self):
+        current_year = datetime.now().year
+        total_consumption = 0
+        try:
+            with open(timesheet_path, newline='') as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=';')
+                for row in reader:
+                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
+                        if (row.get('Flex forbrug')):
+                            total_consumption += float(row.get('Flex forbrug', 0))
+        except Exception as e:
+            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
+            # print(f"Error processing timesheet: {e}")
+        return total_consumption
+
+    def calculate_ferie_consumption(self):
+        current_year = datetime.now().year
+        total_consumption = 0
+        try:
+            with open(timesheet_path, newline='') as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=';')
+                for row in reader:
+                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
+                        if (row.get('Ferie forbrug')):
+                            total_consumption += float(row.get('Ferie forbrug', 0))
+        except Exception as e:
+            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
+            # print(f"Error processing timesheet: {e}")
+        return total_consumption
+
+    def calculate_careday_consumption(self):
+        current_year = datetime.now().year
+        total_consumption = 0
+        try:
+            with open(timesheet_path, newline='') as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=';')
+                for row in reader:
+                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
+                        if (row.get('Omsorgsdage forbrug')):
+                            total_consumption += float(row.get('Omsorgsdage forbrug', 0))
+        except Exception as e:
+            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
+            # print(f"Error processing timesheet: {e}")
+        return total_consumption
+    
+    def calculate_seniorday_consumption(self):
+        current_year = datetime.now().year
+        total_consumption = 0
+        try:
+            with open(timesheet_path, newline='') as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=';')
+                for row in reader:
+                    if datetime.strptime(row['Dato'], "%d-%m-%Y").year == current_year:
+                        if (row.get('Seniordage forbrug')):
+                            total_consumption += float(row.get('Seniordage forbrug', 0))
+        except Exception as e:
+            messagebox.showerror("Fejl", f"Error processing timesheet: {e}")
+            # print(f"Error processing timesheet: {e}")
+        return total_consumption
+
+
+
+
+        ###############################################
         #       Gem og indlæs
         ###############################################
 
@@ -343,8 +357,9 @@ class MainApplication(tk.Tk):
             with open(saldi_path, 'w') as file:
                 json.dump(saldi, file, indent=4)
         except IOError as e:
-            messagebox.showerror("Fejl", f"Error saving saldi: {e}")
-            print(f"Error saving saldi: {e}")
+            messagebox.showerror("Error", f"Error saving saldi: {e}")
+
+
 
     def collect_settings(self):
         # Collect data from entries and return as a dictionary
@@ -360,21 +375,45 @@ class MainApplication(tk.Tk):
             "UseAvgWeekHoursAsDefault": self.use_avgWeekHours_var.get(),
         }
 
+
     def save_settings(self):
-        # Logic to save settings...
-        self.controller.save_user_settings(self.collect_settings())
-        self.controller.calculate_saldi()  # Recalculate saldi after settings update
-        self.controller.frames[SaldiPage].refresh()  # Ensure the SaldiPage is updated
+        # Collect current settings for comparison
+        old_settings = self.load_user_settings()
+        
+        # Collect new settings from the UI
+        new_settings = self.collect_settings()
+        
+        # Save the new settings to user_settings.json
+        with open(usersettings_path, 'w') as file:
+            json.dump(new_settings, file, indent=4)
+        
+        # Check if the changes in settings affect saldi calculation
+        if self.settings_changed(new_settings, old_settings):
+            # If relevant changes are made, then recalculate saldi
+            # self.calculate_saldi()
+            
+            # Refresh the SaldiPage if it's currently loaded
+            if SaldiPage in self.frames:
+                self.frames[SaldiPage].refresh()
+
+    def settings_changed(self, new_settings, old_settings):
+        # Check if work hours or biases have changed
+        return (new_settings.get('WorkHours') != old_settings.get('WorkHours') or
+                new_settings.get('Bias') != old_settings.get('Bias'))
+
+
+
 
     def load_user_settings(self):
-        # Indlæser og retunerer alle data i user_settings.json. Hvis filen ikke findes meldes en fejl og programmet benytter i midlertid default-settings.
-        # Denne metode benyttes af mange andre funktioner i programmet.
         try:
             with open(usersettings_path, 'r') as file:
-                return json.load(file)
+                settings = json.load(file)
+                # print("Loaded user settings:", settings)  # Debug output
+                return settings
         except FileNotFoundError:
-            messagebox.showerror("Fejl", f"File  not found: {usersettings_path}. Try restarting the app.")
+            messagebox.showerror("Fejl", f"File not found: {usersettings_path}. Try restarting the app.")
             return self.get_default_settings()
+
 
     def load_user_saldi(self):
         """
@@ -382,20 +421,27 @@ class MainApplication(tk.Tk):
         """
         try:
             with open(saldi_path, 'r') as file:
-                return json.load(file)
+                saldi = json.load(file)
+                # print(f"Saldi loaded successfully: {saldi}")  # Debug # print to check what's loaded
+                return saldi
         except FileNotFoundError:
-            messagebox.showerror("Error", "File not found: {saldi_path}. Starting with default settings.")
+            messagebox.showerror("Error", f"File not found: {saldi_path}. Starting with default settings.")
             return self.get_default_saldi()
+        except json.JSONDecodeError:
+            messagebox.showerror("Error", "Error reading the saldi file. Check file integrity.")
+            return self.get_default_saldi()
+
         
     def get_default_saldi(self):
-        """
-        Provides a default saldi dictionary, typically used when no saldi file exists.
-        """
         return {"flex": 0, "ferie": 0, "6. ferieuge": 0, "omsorgsdage": 0, "seniordage": 0}
 
 
+    def calculate_and_refresh_saldi(self):
+        self.calculate_saldi()
+        if 'SaldiPage' in self.frames:
+            self.frames['SaldiPage'].refresh()  # Adjust this line according to your actual UI refresh method
+        # Add any other UI components that need refreshing
 
-    
 
 
 
@@ -404,27 +450,28 @@ class MainApplication(tk.Tk):
         ###############################################
 
     def decimal_to_hours_minutes(self, decimal_hours):
-        """Convert decimal hours to a formatted string of hours and minutes."""
-        # Extract the sign for the hours and apply it uniformly to hours and minutes
-        sign = -1 if decimal_hours < 0 else 1
+        if decimal_hours is None:
+            return "00:00"  # Return a default string if the input is None
 
-        # Calculate absolute values for hours and minutes
+        sign = -1 if decimal_hours < 0 else 1
         hours = int(abs(decimal_hours))
         minutes = int((abs(decimal_hours) - hours) * 60)
 
-        # Format string based on original sign
         if sign < 0:
             return f"-{hours:02}:{minutes:02}"
         else:
             return f"{hours:02}:{minutes:02}"
-    
+
+
 
     def hours_minutes_to_decimal(self, time_str):
-        """Convert a string formatted as 'HH:MM' to decimal hours, correctly handling negative times."""
-        hours, minutes = map(int, time_str.split(':'))
-        if hours < 0:
-            # When hours are negative, we subtract the minutes converted to hours to keep the time negative.
-            return hours - abs(minutes) / 60.0
-        else:
-            # When hours are positive, we add the minutes converted to hours.
-            return hours + minutes / 60.0
+        try:
+            hours, minutes = map(int, time_str.split(':'))
+            if hours < 0:
+                return hours - abs(minutes) / 60.0
+            else:
+                return hours + minutes / 60.0
+        except ValueError:
+            # print(f"Error converting time to decimal: Invalid format '{time_str}'")
+            return 0
+

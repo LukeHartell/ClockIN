@@ -5,7 +5,6 @@ from tkinter.font import Font
 from tkinter import simpledialog
 import json
 
-from MainApplication import *
 from ReportPage import *
 import SaldiPage
 from utilities import usersettings_path
@@ -109,12 +108,14 @@ class SettingsPage(tk.Frame):
         tk.Button(self, text="Gem indstillinger", font=Font(weight="bold"), padx=20, command=self.save_and_recalculate_saldi, background='#009687', foreground='white').grid(row=25, column=0, padx=25, pady=50)
 
     def save_and_recalculate_saldi(self):
-        self.save_config()
-        self.controller.calculate_saldi()
-        # self.controller.update_ui()  # Ensure this is called to refresh UI immediately
-        self.load_workhours_to_widget()
-
-
+        # Save settings and determine if critical settings that affect saldi calculations have changed
+        critical_settings_changed = self.save_config()  # Let's make save_config return a boolean
+        
+        # Only recalculate saldi if necessary
+        if critical_settings_changed:
+            self.controller.calculate_saldi()
+            if SaldiPage in self.controller.frames:
+                self.controller.frames[SaldiPage].refresh()
 
     def add_child(self):
         name = "Barn"
@@ -130,13 +131,10 @@ class SettingsPage(tk.Frame):
             del self.config["Children"][index]
             self.children_listbox.delete(index)
 
-    def save_config(self):
-        # Capture old values to detect changes
-        old_flex_bias = self.config.get('Bias', {}).get('Flex', "0:00")
-        # old_flex_bias = self.controller.hours_minutes_to_decimal(old_flex_bias)
 
-        old_ferie_bias = self.config.get('Bias', {}).get('Ferie', '0')
-        # old_ferie_bias = self.controller.hours_minutes_to_decimal(old_ferie_bias)
+    def save_config(self):
+        # Load old settings to detect changes
+        old_settings = self.controller.load_user_settings()
 
         # Update the settings from UI components
         self.config["UserDetails"] = {
@@ -154,70 +152,46 @@ class SettingsPage(tk.Frame):
             "Seniorday": self.bias_seniorday.get()
         }
 
-
-
-
-        # Update working hours
-        # Iterate through each day and its associated from/to time entries
+        # Update working hours and check for input validity
         for day, (from_entry, to_entry) in self.work_hours_entries.items():
-            # Parse the "From" and "To" time string to a datetime object
             from_time = datetime.strptime(from_entry.get(), '%H:%M')
             to_time = datetime.strptime(to_entry.get(), '%H:%M')
-            
-            # Check if the "To" time is before the "From" time, indicating the work crossed into the next day
             if to_time < from_time:
-                # Display an error message if the "To" time is earlier than the "From" time
                 messagebox.showerror("Error", "Start time cannot be before end time.")
+                return False  # Return False indicating that the settings have not been successfully updated
             else:
-                # Calculate the time difference between "To" and "From"
                 total_duration = to_time - from_time
-                # Convert total duration to total hours in decimal
                 hours_in_decimal = total_duration.seconds / 3600
-
-                # Convert decimal hours to a formatted string "X hours Y minutes"
                 total_formatted = self.controller.decimal_to_hours_minutes(hours_in_decimal)
-
-                # Save the formatted duration along with the original "From" and "To" times in the configuration dictionary
                 self.config["WorkHours"][day] = {
                     "From": from_entry.get(),
                     "To": to_entry.get(),
                     "Total": total_formatted
                 }
 
-        # Save the checkbox state
+        # Update checkbox states
         self.config["UseNormalHoursAsDefault"] = self.use_normal_hours_var.get()
         self.config["UseAvgWeekHoursAsDefault"] = self.use_avgWeekHours_var.get()
-        
 
         # Save the configuration to a file
         with open(usersettings_path, "w") as file:
             json.dump(self.config, file, indent=4)
 
-
-        # Beregn timer per uge
-        timer_per_uge = self.controller.beregn_ugetimer()
-        self.config["HoursPerWeek"] = timer_per_uge
-        self.config["HoursPerDay"] = timer_per_uge/5
-
+        # Calculate hours per week and day
+        weekly_hours = self.controller.beregn_ugetimer()
+        self.config["HoursPerWeek"] = weekly_hours
+        self.config["HoursPerDay"] = weekly_hours / 5
         with open(usersettings_path, "w") as file:
             json.dump(self.config, file, indent=4)
 
+        # Determine if recalculation is necessary by comparing critical settings
+        flex_bias_changed = old_settings['Bias'].get('Flex', '') != self.config['Bias'].get('Flex', '')
+        ferie_bias_changed = old_settings['Bias'].get('Ferie', '') != self.config['Bias'].get('Ferie', '')
 
+        self.controller.calculate_and_refresh_saldi() 
 
-        # Check if critical settings have changed
-        flex_bias_changed = old_flex_bias != self.bias_flex.get()
-        ferie_bias_changed = old_ferie_bias != self.bias_ferie.get()
-
-        # Trigger recalculation if necessary
-        if flex_bias_changed or ferie_bias_changed:
-            self.controller.calculate_saldi()  # Recalculate all saldi
-
-            # If this causes updates to saldi that should reflect in the UI, ensure UI is updated
-            if SaldiPage in self.controller.frames:
-                self.controller.frames[SaldiPage].refresh()
-
-        # Show confirmation message
-        # tk.messagebox.showinfo("Gemt", "Indstillinger gemt succesfuldt!")
+        # Return True if recalculation is necessary
+        return flex_bias_changed or ferie_bias_changed
 
 
 

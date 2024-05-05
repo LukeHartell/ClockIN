@@ -403,18 +403,24 @@ class MainPage(tk.Frame):
                 file.truncate()
                 json.dump(balances, file)
         except FileNotFoundError:
-            print("Balance file not found, creating new.")
+            # print("Balance file not found, creating new.")
             with open(saldi_path, 'w') as file:
                 json.dump({'flex': 0}, file)  # Create with base value if not found
 
     def load_flexhours_to_widget(self):
         self.config = self.controller.load_user_saldi()
 
-        flex_total = self.config.get("flex", 'Fejl')
-        if flex_total != 'Fejl':
-            flex_total = self.controller.decimal_to_hours_minutes(flex_total)
+        flex_total = self.config.get("flex", 0)  # Fallback to 0 if None
+        # print(f"flex_total loaded: {flex_total}")
+
+        if flex_total is None:
+            flex_total = 0  # Ensure flex_total is never None
+
+        flex_total = self.controller.decimal_to_hours_minutes(flex_total)
         self.label_flex_total.config(text=f"Flex i alt: {flex_total}")
 
-        flex_week = self.calculate_weekly_flex()  # Calculate or fetch the weekly flex time
-        flex_week_formatted = self.controller.decimal_to_hours_minutes(flex_week)  # Convert to readable format
+        flex_week = self.calculate_weekly_flex()  # Assume this also returns a valid number
+        flex_week_formatted = self.controller.decimal_to_hours_minutes(flex_week)
         self.label_flex_week.config(text=f"Flex i denne uge: {flex_week_formatted}")
+
+

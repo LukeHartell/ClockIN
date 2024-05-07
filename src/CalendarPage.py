@@ -9,10 +9,10 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from config import *
-from NewDayOff import *
+from NewDayOffPage import *
 from utilities import timesheet_path, saldi_path, sheet_headers
 
-class MainPage(tk.Frame):
+class CalendarPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
@@ -48,7 +48,7 @@ class MainPage(tk.Frame):
         self.label_flex_week.pack(side="top", padx=20)
 
         # Button to register new off day
-        btn_new1 = tk.Button(frame_buttons, text="Registrér fri", font=Font(size=12, weight="bold"), padx=40, pady=20, background="#f59725", foreground="White", command=lambda: self.controller.show_frame(NewDayOff))
+        btn_new1 = tk.Button(frame_buttons, text="Registrér fri", font=Font(size=12, weight="bold"), padx=40, pady=20, background="#f59725", foreground="White", command=lambda: self.controller.show_frame(NewDayOffPage))
         btn_new1.pack(side="bottom", padx=20, pady=20)
 
         # Time pickers and labels in a single frame using grid layout

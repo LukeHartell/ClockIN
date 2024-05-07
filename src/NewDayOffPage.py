@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import json
 
-class NewDayOff(tk.Frame):
+class NewDayOffPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller

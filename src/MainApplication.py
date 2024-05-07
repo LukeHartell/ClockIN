@@ -6,11 +6,11 @@ import sys
 import json
 from datetime import datetime, date
 
-from MainPage import MainPage
+from CalendarPage import CalendarPage
 from SaldiPage import SaldiPage
 from SettingsPage import SettingsPage
 from ReportPage import ReportPage
-from NewDayOff import NewDayOff
+from NewDayOffPage import NewDayOffPage
 
 from config import get_default_settings
 from utilities import timesheet_path, usersettings_path, saldi_path, projectname, version
@@ -70,7 +70,7 @@ class MainApplication(tk.Tk):
         # Check if the frame being shown is SaldiPage and call refresh if it is
         if context == SaldiPage:
             frame.refresh()
-        if context == MainPage:
+        if context == CalendarPage:
             frame.on_date_select(self)
 
     def beregn_ugetimer(self):
@@ -102,17 +102,17 @@ class MainApplication(tk.Tk):
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
-        for F in (MainPage, SaldiPage, SettingsPage, ReportPage, NewDayOff):
+        for F in (CalendarPage, SaldiPage, SettingsPage, ReportPage, NewDayOffPage):
             frame = F(container, self)
             self.frames[F] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
-        self.show_frame(MainPage)
+        self.show_frame(CalendarPage)
 
         menu = tk.Menu(self)
         self.config(menu=menu)
         file_menu = tk.Menu(menu, tearoff=0)
-        menu.add_cascade(label="Kalender", command=lambda: self.show_frame(MainPage))
+        menu.add_cascade(label="Kalender", command=lambda: self.show_frame(CalendarPage))
         menu.add_cascade(label="Saldi", command=lambda: self.show_frame(SaldiPage))
         menu.add_cascade(label="Rapporter", command=lambda: self.show_frame(ReportPage))
         menu.add_cascade(label="Indstillinger", command=lambda: self.show_frame(SettingsPage))

@@ -228,32 +228,66 @@ class CalendarPage(tk.Frame):
         return date.strftime("%d-%m-%Y"), selected_day
 
     def calculate_weekly_flex(self):
+        """
+        Calculate the total flex hours accumulated by the user for the current week.
+
+        This function computes the total flex hours by iterating over the timesheet data,
+        considering only the current week's workdays (Monday to Friday). It then updates 
+        the user's balance with the calculated flex hours.
+
+        The function handles edge cases where the calculation is done on a Monday, ensuring 
+        it includes only the current week's data starting from Monday.
+        """
+
+        # Get today's date
         today = datetime.today()
+        
+        # Calculate the current week's Monday and Sunday
         monday = today - timedelta(days=today.weekday())
         sunday = monday + timedelta(days=6)
-
+        
+        # Adjust for the edge case where today is Monday
+        if today.weekday() == 0:
+            monday = today
+            sunday = today + timedelta(days=6)
+        
+        # Initialize weekly flex to zero
         weekly_flex = Decimal('0')
+        
+        # Load balances and timesheet data
         balances = self.load_balances()
         timesheet = self.read_all_data()
 
+        # Iterate through each entry in the timesheet
         for key, value in timesheet.items():
             date = datetime.strptime(key, "%d-%m-%Y")
+            
+            # Check if the date is within the current week
             if monday <= date <= sunday:
-                if date.weekday() < 5:  # Checks if it's a weekday (Monday=0, Sunday=6)
+                # Only consider weekdays (Monday to Friday)
+                if date.weekday() < 5:
+                    # Parse start and end times
                     start_time = datetime.strptime(value['Starttid'], '%H:%M')
                     end_time = datetime.strptime(value['Sluttid'], '%H:%M')
+                    
+                    # Calculate the duration of work in minutes
                     duration = end_time - start_time
                     arbejdstid_minutes = duration.seconds // 60
+                    
+                    # Convert norm time to decimal hours and then to minutes
                     normtid = self.controller.hours_minutes_to_decimal(value['Normtid'])
                     daily_flex_minutes = arbejdstid_minutes - (normtid * 60)
+                    
+                    # Accumulate daily flex time to weekly flex, converted to hours
                     weekly_flex += Decimal(daily_flex_minutes) / Decimal('60.0')
                 else:
-                    # Handle weekend work, possibly as overtime or ignore for flex
-                    # Example: Add to a separate overtime tally if needed
+                    # Weekend work handling (optional)
                     continue
 
+        # Update and save the user's balance with the calculated weekly flex
         balances['flex_week'] = float(weekly_flex)
         self.save_balances(balances)
+        
         return weekly_flex
 
 
